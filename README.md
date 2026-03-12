@@ -4,10 +4,8 @@ Tampermonkey bridge script for collecting DoorDash menu data and forwarding it t
 
 ## Files
 
-- `doordashBridge.js`: userscript source
+- `doordashBridge.user.js`: userscript source
 
-## Expected GitHub Pages URL
+## Install URL
 
-If this repository is published as GitHub Pages under the `jooj211` account, the script is configured to recognize:
-
-- `https://jooj211.github.io/doordash-bridge/`
+- `https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.user.js`

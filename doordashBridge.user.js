@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         DoorDash Modifier Collector — Menu Maker Bridge
 // @namespace    popmenu
-// @version      6.1
+// @version      6.2
 // @description  Collects DoorDash menu data, sends it to Menu Maker via Supabase Realtime, and announces bridge presence on Menu Maker
 // @match        https://www.doordash.com/*
 // @match        https://*.lovable.app/*
 // @match        https://order.online/*
 // @match        http://127.0.0.1/*
 // @match        http://localhost/*
-// @updateURL    https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.js
-// @downloadURL  https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.js
+// @updateURL    https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.user.js
+// @downloadURL  https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -25,7 +25,7 @@
   const BRIDGE_PING_EVENT = "menu-maker:doordash-bridge-ping";
   const BRIDGE_STATUS_EVENT = "menu-maker:doordash-bridge-status";
   const BRIDGE_MESSAGE_TYPE = "menu-maker:doordash-menu-collected";
-  const BRIDGE_VERSION = "6.1";
+  const BRIDGE_VERSION = "6.2";
   const isDoorDashHost =
     /(^|\.)doordash\.com$/i.test(window.location.hostname) ||
     /(^|\.)order\.online$/i.test(window.location.hostname);
