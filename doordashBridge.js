@@ -1,14 +1,15 @@
 // ==UserScript==
 // @name         DoorDash Modifier Collector — Menu Maker Bridge
 // @namespace    popmenu
-// @version      5.9
+// @version      6.0
 // @description  Collects DoorDash menu data, sends it to Menu Maker via Supabase Realtime, and announces bridge presence on Menu Maker
 // @match        https://www.doordash.com/*
 // @match        https://*.lovable.app/*
 // @match        https://order.online/*
-// @match        https://jooj211.github.io/doordash-bridge/*
 // @match        http://127.0.0.1/*
 // @match        http://localhost/*
+// @updateURL    https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.js
+// @downloadURL  https://raw.githubusercontent.com/jooj211/doordash-bridge/main/doordashBridge.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -24,16 +25,12 @@
   const BRIDGE_PING_EVENT = "menu-maker:doordash-bridge-ping";
   const BRIDGE_STATUS_EVENT = "menu-maker:doordash-bridge-status";
   const BRIDGE_MESSAGE_TYPE = "menu-maker:doordash-menu-collected";
-  const BRIDGE_VERSION = "5.9";
+  const BRIDGE_VERSION = "6.0";
   const isDoorDashHost = /(^|\.)doordash\.com$/i.test(window.location.hostname);
-  const isGitHubPagesMenuMakerHost =
-    window.location.hostname === "jooj211.github.io" &&
-    /^\/doordash-bridge(?:\/|$)/.test(window.location.pathname);
   const isMenuMakerHost =
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost" ||
     /(^|\.)order\.online$/i.test(window.location.hostname) ||
-    isGitHubPagesMenuMakerHost ||
     /(^|\.)lovable\.app$/i.test(window.location.hostname);
 
   const announceBridgePresence = () => {
