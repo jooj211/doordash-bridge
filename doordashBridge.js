@@ -5,7 +5,7 @@
 // @description  Collects DoorDash menu data, sends it to Menu Maker via Supabase Realtime, and announces bridge presence on Menu Maker
 // @match        https://www.doordash.com/*
 // @match        https://*.lovable.app/*
-// @match        https://diasj21.github.io/doordash-bridge/*
+// @match        https://jooj211.github.io/doordash-bridge/*
 // @match        http://127.0.0.1/*
 // @match        http://localhost/*
 // @grant        none
@@ -26,7 +26,7 @@
   const BRIDGE_VERSION = "5.8";
   const isDoorDashHost = /(^|\.)doordash\.com$/i.test(window.location.hostname);
   const isGitHubPagesMenuMakerHost =
-    window.location.hostname === "diasj21.github.io" &&
+    window.location.hostname === "jooj211.github.io" &&
     /^\/doordash-bridge(?:\/|$)/.test(window.location.pathname);
   const isMenuMakerHost =
     window.location.hostname === "127.0.0.1" ||

@@ -8,6 +8,6 @@ Tampermonkey bridge script for collecting DoorDash menu data and forwarding it t
 
 ## Expected GitHub Pages URL
 
-If this repository is published as GitHub Pages under the `diasj21` account, the script is configured to recognize:
+If this repository is published as GitHub Pages under the `jooj211` account, the script is configured to recognize:
 
-- `https://diasj21.github.io/doordash-bridge/`
+- `https://jooj211.github.io/doordash-bridge/`
