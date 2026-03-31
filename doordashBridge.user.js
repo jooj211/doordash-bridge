@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         DoorDash Modifier Collector — Menu Maker Bridge
 // @namespace    popmenu
-// @version      6.2
+// @version      7.1
 // @description  Collects DoorDash menu data, sends it to Menu Maker via Supabase Realtime, and announces bridge presence on Menu Maker
 // @match        https://www.doordash.com/*
 // @match        https://*.lovable.app/*
@@ -25,13 +25,12 @@
   const BRIDGE_PING_EVENT = "menu-maker:doordash-bridge-ping";
   const BRIDGE_STATUS_EVENT = "menu-maker:doordash-bridge-status";
   const BRIDGE_MESSAGE_TYPE = "menu-maker:doordash-menu-collected";
-  const BRIDGE_VERSION = "6.2";
-  const isDoorDashHost =
-    /(^|\.)doordash\.com$/i.test(window.location.hostname) ||
-    /(^|\.)order\.online$/i.test(window.location.hostname);
+  const BRIDGE_VERSION = "7.1";
+  const isDoorDashHost = /(^|\.)doordash\.com$/i.test(window.location.hostname);
   const isMenuMakerHost =
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost" ||
+    /(^|\.)order\.online$/i.test(window.location.hostname) ||
     /(^|\.)lovable\.app$/i.test(window.location.hostname);
 
   const announceBridgePresence = () => {
@@ -58,9 +57,7 @@
   }
 
   // ─── Session detection ────────────────────────────────────────────────────
-  const MM_SESSION = new URLSearchParams(window.location.search).get(
-    "mm_session",
-  );
+  const MM_SESSION = new URLSearchParams(window.location.search).get("mm_session");
   const AUTO_MODE = !!MM_SESSION;
 
   // ─── State ────────────────────────────────────────────────────────────────
@@ -96,39 +93,48 @@
       /\bdrinks? with (your|this)\b/.test(name) ||
       /\bbeverage\b/.test(name);
 
-    return (
-      looksPromotional && !(group?.required || (group?.minSelect || 0) > 0)
-    );
+    return looksPromotional && !(group?.required || (group?.minSelect || 0) > 0);
   };
 
   // ─── Apollo helpers ───────────────────────────────────────────────────────
 
-  const waitForApollo = (cb, retries = 30) => {
+  // T2: Emit error event when Apollo client is not found after retries
+  const waitForApollo = (cb, onFail, retries = 30) => {
     if (window.__APOLLO_CLIENT__) {
       cb();
       return;
     }
-    if (retries <= 0) return;
-    setTimeout(() => waitForApollo(cb, retries - 1), 300);
+    if (retries <= 0) {
+      console.warn("[MM Bridge] Apollo client not found after retries");
+      window.dispatchEvent(
+        new CustomEvent(BRIDGE_STATUS_EVENT, {
+          detail: {
+            installed: true,
+            version: BRIDGE_VERSION,
+            error: "apollo_not_found",
+            message:
+              "DoorDash Apollo client not detected. The page may not have loaded correctly — try refreshing the DoorDash tab.",
+          },
+        }),
+      );
+      if (onFail) onFail();
+      return;
+    }
+    setTimeout(() => waitForApollo(cb, onFail, retries - 1), 300);
   };
 
   const waitForFeed = (cb, retries = 40) => {
     const apollo = window.__APOLLO_CLIENT__;
     if (apollo) {
       const rootQuery = apollo.cache.data.data?.["ROOT_QUERY"] || {};
-      const feedKeys = Object.keys(rootQuery).filter((k) =>
-        k.startsWith("storepageFeed"),
-      );
+      const feedKeys = Object.keys(rootQuery).filter((k) => k.startsWith("storepageFeed"));
       const feedKey =
         feedKeys.find(
           (k) =>
             k.includes("Delivery") &&
             /"menuId":"\d+"/.test(k) &&
             rootQuery[k]?.itemLists?.some((l) => l.items?.length > 0),
-        ) ||
-        feedKeys.find((k) =>
-          rootQuery[k]?.itemLists?.some((l) => l.items?.length > 0),
-        );
+        ) || feedKeys.find((k) => rootQuery[k]?.itemLists?.some((l) => l.items?.length > 0));
       const feed = feedKey ? rootQuery[feedKey] : null;
       if (feed) {
         cb(feedKey, feed);
@@ -156,12 +162,7 @@
     const items = [];
     for (const list of feed.itemLists || []) {
       const category = list.name || "Uncategorized";
-      const categoryDescription =
-        list.description ||
-        list.subtitle ||
-        list.subtext ||
-        list.headerDescription ||
-        null;
+      const categoryDescription = list.description || list.subtitle || list.subtext || list.headerDescription || null;
       for (const item of list.items || []) {
         if (!item.id) continue;
         let categoryId = null;
@@ -300,9 +301,7 @@
           .map((o) => ({
             id: o.id,
             name: o.name,
-            price: o.unitAmount
-              ? `$${(o.unitAmount / 100).toFixed(2)}`
-              : "$0.00",
+            price: o.unitAmount ? `$${(o.unitAmount / 100).toFixed(2)}` : "$0.00",
           }))
           .filter((o) => o.name),
       }))
@@ -323,10 +322,7 @@
   // ─── rawContent builder ───────────────────────────────────────────────────
 
   const buildRawContent = () => {
-    const storeName =
-      state.storeName ||
-      document.title.replace(/\s*[-|].*$/, "").trim() ||
-      "Menu";
+    const storeName = state.storeName || document.title.replace(/\s*[-|].*$/, "").trim() || "Menu";
     const lines = [`# ${storeName}`, ""];
     const byCategory = new Map();
     for (const item of state.items) {
@@ -336,9 +332,7 @@
     for (const [category, catItems] of byCategory) {
       lines.push(`## ${category}`, "");
       const categoryDescription = catItems.find(
-        (item) =>
-          item.categoryDescription &&
-          item.categoryDescription !== item.category,
+        (item) => item.categoryDescription && item.categoryDescription !== item.category,
       )?.categoryDescription;
       if (categoryDescription) {
         lines.push(categoryDescription, "");
@@ -348,8 +342,7 @@
         if (!data) continue;
         const priceStr = data.price ? ` — ${data.price}` : "";
         lines.push(`${data.itemName}${priceStr}`);
-        if (data.description && data.description !== data.itemName)
-          lines.push(data.description);
+        if (data.description && data.description !== data.itemName) lines.push(data.description);
         lines.push("");
       }
     }
@@ -358,8 +351,8 @@
 
   // ─── Output payload ───────────────────────────────────────────────────────
 
-  const buildPayload = () => ({
-    source: "doordash",
+  const buildPayload = (sourceOverride) => ({
+    source: sourceOverride || "doordash",
     storeId: state.storeId,
     storeName: state.storeName,
     pageUrl: window.location.href,
@@ -383,7 +376,7 @@
   });
 
   const postPayloadToMenuMaker = (payload) => {
-    if (!MM_SESSION || !window.opener) return;
+    if (!MM_SESSION || !window.opener) return false;
     try {
       window.opener.postMessage(
         {
@@ -393,20 +386,21 @@
         },
         "*",
       );
+      return true;
     } catch (err) {
       console.warn("[MM Bridge] postMessage failed:", err);
+      return false;
     }
   };
 
   // ─── Supabase Realtime publish ────────────────────────────────────────────
 
-  const publishToMenuMaker = async () => {
-    if (state.published) return;
-    state.published = true;
-    updateStatus("📡 Sending to Menu Maker…", "collecting");
+  // T5: Track active channel for cleanup
+  let supabaseChannel = null;
+
+  // T4: Publish via Realtime as primary, postMessage as fallback only
+  const publishViaRealtime = async (payload) => {
     try {
-      const payload = buildPayload();
-      postPayloadToMenuMaker(payload);
       const topic = `realtime:${CHANNEL_PREFIX}:${MM_SESSION}`;
       const res = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
         method: "POST",
@@ -420,25 +414,164 @@
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-      updateStatus("✅ Sent! Closing tab…", "done");
-      setTimeout(() => window.close(), 1200);
+
+      // T5: Unsubscribe after successful publish
+      if (supabaseChannel) {
+        try {
+          await supabaseChannel.unsubscribe();
+        } catch (e) {
+          /* ignore */
+        }
+        supabaseChannel = null;
+      }
+      return true;
+    } catch (err) {
+      console.error("[MM Bridge] Realtime publish error:", err);
+      return false;
+    }
+  };
+
+  // T4: Primary path is Realtime, fallback to postMessage
+  const publishPayload = async (payload) => {
+    const realtimeSuccess = await publishViaRealtime(payload);
+    if (!realtimeSuccess && window.opener) {
+      postPayloadToMenuMaker(payload);
+    }
+    return realtimeSuccess;
+  };
+
+  const publishToMenuMaker = async (sourceOverride) => {
+    if (state.published) return;
+    state.published = true;
+    updateStatus("📡 Sending to Menu Maker…", "collecting");
+    try {
+      const payload = buildPayload(sourceOverride);
+      const success = await publishPayload(payload);
+      if (success) {
+        updateStatus("✅ Sent! Closing tab…", "done");
+        setTimeout(() => window.close(), 1200);
+      } else if (MM_SESSION && window.opener) {
+        updateStatus("Menu Maker was notified directly. Closing tab...", "done");
+        setTimeout(() => window.close(), 1200);
+      } else {
+        updateStatus("⚠️ Send failed. Copy JSON manually.", "warn");
+        const copyBtn = document.getElementById("mm-copy-btn");
+        if (copyBtn) copyBtn.disabled = false;
+      }
     } catch (err) {
       console.error("[MM Bridge] Publish error:", err);
-      if (MM_SESSION && window.opener) {
-        updateStatus(
-          "Menu Maker was notified directly. Closing tab...",
-          "done",
-        );
-        setTimeout(() => window.close(), 1200);
-        return;
-      }
-      updateStatus(
-        `⚠️ Send failed: ${err.message}. Copy JSON manually.`,
-        "warn",
-      );
+      updateStatus(`⚠️ Send failed: ${err.message}. Copy JSON manually.`, "warn");
       const copyBtn = document.getElementById("mm-copy-btn");
       if (copyBtn) copyBtn.disabled = false;
     }
+  };
+
+  // ─── T1: DOM scraping fallback ────────────────────────────────────────────
+
+  const attemptDomFallback = () => {
+    console.log("[MM Bridge] Attempting DOM scraping fallback...");
+
+    // Try to find store name
+    let storeName = null;
+    const h1 = document.querySelector("h1");
+    const storeNameEl = document.querySelector('[data-testid="store-name"]');
+    if (storeNameEl) {
+      storeName = storeNameEl.textContent?.trim() || null;
+    } else if (h1) {
+      storeName = h1.textContent?.trim() || null;
+    }
+
+    // Try structured data from LD+JSON
+    let ldItems = [];
+    const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of ldScripts) {
+      try {
+        const data = JSON.parse(script.textContent || "");
+        if (data["@type"] === "Restaurant" || data["@type"] === "FoodEstablishment") {
+          if (!storeName && data.name) storeName = data.name;
+          if (data.hasMenu?.hasMenuSection) {
+            const sections = Array.isArray(data.hasMenu.hasMenuSection)
+              ? data.hasMenu.hasMenuSection
+              : [data.hasMenu.hasMenuSection];
+            for (const section of sections) {
+              const sectionName = section.name || "Menu";
+              const menuItems = Array.isArray(section.hasMenuItem)
+                ? section.hasMenuItem
+                : section.hasMenuItem
+                  ? [section.hasMenuItem]
+                  : [];
+              for (const mi of menuItems) {
+                ldItems.push({
+                  id: mi["@id"] || crypto.randomUUID(),
+                  name: mi.name || "",
+                  description: mi.description || "",
+                  price: mi.offers?.price ? `$${mi.offers.price}` : "",
+                  category: sectionName,
+                  categoryDescription: section.description || null,
+                  categoryId: null,
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        /* ignore parse errors */
+      }
+    }
+
+    // Try DOM elements for menu items
+    const domItems = [];
+    const menuItemEls = document.querySelectorAll(
+      '[data-testid*="MenuItem"], [data-testid*="menuItem"], [data-testid*="menu-item"]',
+    );
+    for (const el of menuItemEls) {
+      const nameEl = el.querySelector('[data-testid*="Name"], [data-testid*="name"], h3, h4, span:first-child');
+      const priceEl = el.querySelector('[data-testid*="Price"], [data-testid*="price"]');
+      const descEl = el.querySelector('[data-testid*="Description"], [data-testid*="description"], p');
+      const name = nameEl?.textContent?.trim();
+      if (!name) continue;
+      domItems.push({
+        id: crypto.randomUUID(),
+        name,
+        description: descEl?.textContent?.trim() || "",
+        price: priceEl?.textContent?.trim() || "",
+        category: "Menu",
+        categoryDescription: null,
+        categoryId: null,
+      });
+    }
+
+    const items = ldItems.length > 0 ? ldItems : domItems;
+
+    if (!storeName && items.length === 0) {
+      // No useful data found — emit apollo_not_found error
+      console.warn("[MM Bridge] DOM fallback found no useful data");
+      return false;
+    }
+
+    if (!storeName) {
+      storeName = document.title.replace(/\s*[-|].*$/, "").trim() || "Menu";
+    }
+
+    console.log(`[MM Bridge] DOM fallback found: store="${storeName}", ${items.length} items`);
+
+    // Populate state with DOM data
+    state.storeName = storeName;
+    state.items = items;
+    state.totalToCollect = items.length;
+    state.collected = items.length;
+
+    for (const item of items) {
+      state.itemDataById[item.id] = {
+        itemName: item.name,
+        description: item.description,
+        price: item.price,
+        category: item.category,
+        modifierGroups: [],
+      };
+    }
+
+    return true;
   };
 
   // ─── Main collection flow ─────────────────────────────────────────────────
@@ -450,37 +583,41 @@
     state.errors = 0;
     state.itemDataById = {};
     state.totalToCollect = state.items.length;
-    updateStatus(
-      `⚡ Fetching modifiers for ${state.items.length} items…`,
-      "collecting",
-    );
+    updateStatus(`⚡ Fetching modifiers for ${state.items.length} items…`, "collecting");
     updatePanel();
+
+    // T3: Calculate delay between queries based on menu size
+    const itemCount = state.items.length;
+    const QUERY_DELAY_MS = itemCount > 100 ? 150 : itemCount > 50 ? 80 : 0;
 
     const CONCURRENCY = 3;
     for (let i = 0; i < state.items.length; i += CONCURRENCY) {
       const batch = state.items.slice(i, i + CONCURRENCY);
       await Promise.all(
-        batch.map(async (item) => {
+        batch.map(async (item, batchIdx) => {
           try {
             const itemPage = await fetchItemPage(item);
             storeItemResult(item, itemPage);
           } catch (e) {
-            console.warn(
-              `[MM Bridge] Error on item ${item.id} (${item.name}):`,
-              e.message,
-            );
+            console.warn(`[MM Bridge] Error on item ${item.id} (${item.name}):`, e.message);
             storeItemResult(item, null);
             state.errors++;
           }
         }),
       );
-      if (i + CONCURRENCY < state.items.length) await sleep(500);
+
+      // T3: Emit progress status during collection
+      const completed = Math.min(i + CONCURRENCY, state.items.length);
+      updateStatus(`⚡ Collecting item ${completed} of ${state.items.length}…`, "collecting");
+
+      // T3: Add delay between batches for large menus
+      if (i + CONCURRENCY < state.items.length) {
+        await sleep(QUERY_DELAY_MS > 0 ? Math.max(QUERY_DELAY_MS, 500) : 500);
+      }
     }
 
     state.isCollecting = false;
-    const withMods = Object.values(state.itemDataById).filter(
-      (v) => v.modifierGroups.length > 0,
-    ).length;
+    const withMods = Object.values(state.itemDataById).filter((v) => v.modifierGroups.length > 0).length;
     const noMods = state.items.length - withMods;
     updateStatus(
       `✅ Done! ${withMods} with modifiers, ${noMods} without${state.errors ? `, ${state.errors} failed` : ""}.`,
@@ -632,17 +769,12 @@
 
   const updatePanel = () => {
     const entries = Object.entries(state.itemDataById);
-    const withMods = entries.filter(
-      ([, v]) => v.modifierGroups.length > 0,
-    ).length;
+    const withMods = entries.filter(([, v]) => v.modifierGroups.length > 0).length;
     const idsEl = document.getElementById("mm-ids-count");
     const modsEl = document.getElementById("mm-mods-count");
     if (idsEl) idsEl.textContent = state.items.length || "—";
     if (modsEl) modsEl.textContent = entries.length ? withMods : "—";
-    const pct =
-      state.totalToCollect > 0
-        ? Math.round((state.collected / state.totalToCollect) * 100)
-        : 0;
+    const pct = state.totalToCollect > 0 ? Math.round((state.collected / state.totalToCollect) * 100) : 0;
     const bar = document.getElementById("mm-progress-bar");
     if (bar) bar.style.width = pct + "%";
     const collectBtn = document.getElementById("mm-collect-btn");
@@ -706,37 +838,58 @@
 
   // ─── Boot ─────────────────────────────────────────────────────────────────
 
-  waitForApollo(() => {
-    injectPanel();
-    updateStatus("⏳ Waiting for menu data…", "");
+  // T1+T2: Try Apollo first, fall back to DOM scraping
+  waitForApollo(
+    // Apollo found — normal path
+    () => {
+      injectPanel();
+      updateStatus("⏳ Waiting for menu data…", "");
 
-    waitForFeed((feedKey, feed) => {
-      if (!feed || !feedKey) {
-        updateStatus(
-          "⚠️ No menu data found. Are you on a DoorDash store page?",
-          "warn",
-        );
-        return;
+      waitForFeed((feedKey, feed) => {
+        if (!feed || !feedKey) {
+          updateStatus("⚠️ No menu data found. Are you on a DoorDash store page?", "warn");
+          return;
+        }
+
+        const { storeId, menuId } = parseIds(feedKey);
+        state.storeId = storeId;
+        state.menuId = menuId;
+
+        const cache = window.__APOLLO_CLIENT__.cache.data.data;
+        const storeHeader = cache[`StoreHeader:${storeId}`];
+        state.storeName = storeHeader?.name || null;
+
+        state.items = extractItems(feed);
+
+        if (!state.items.length) {
+          updateStatus("⚠️ No items found in menu feed.", "warn");
+          return;
+        }
+
+        updatePanel();
+
+        collectAll(); // auto-start always
+      });
+    },
+    // T1: Apollo not found — try DOM fallback
+    () => {
+      console.log("[MM Bridge] Apollo not found, trying DOM fallback...");
+      injectPanel();
+
+      const domSuccess = attemptDomFallback();
+      if (domSuccess) {
+        updateStatus(`📄 Found ${state.items.length} items via page scraping (no modifier data available).`, "ready");
+        updatePanel();
+
+        if (AUTO_MODE) {
+          publishToMenuMaker("doordash_dom_fallback");
+        } else {
+          const closeBtn = document.getElementById("mm-close-btn");
+          if (closeBtn) closeBtn.style.display = "";
+        }
+      } else {
+        updateStatus("⚠️ Could not find menu data. Try refreshing the DoorDash page.", "warn");
       }
-
-      const { storeId, menuId } = parseIds(feedKey);
-      state.storeId = storeId;
-      state.menuId = menuId;
-
-      const cache = window.__APOLLO_CLIENT__.cache.data.data;
-      const storeHeader = cache[`StoreHeader:${storeId}`];
-      state.storeName = storeHeader?.name || null;
-
-      state.items = extractItems(feed);
-
-      if (!state.items.length) {
-        updateStatus("⚠️ No items found in menu feed.", "warn");
-        return;
-      }
-
-      updatePanel();
-
-      collectAll(); // auto-start always
-    });
-  });
+    },
+  );
 })();
