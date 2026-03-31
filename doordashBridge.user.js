@@ -401,7 +401,7 @@
   // T4: Publish via Realtime as primary, postMessage as fallback only
   const publishViaRealtime = async (payload) => {
     try {
-      const topic = `realtime:${CHANNEL_PREFIX}:${MM_SESSION}`;
+      const topic = `${CHANNEL_PREFIX}:${MM_SESSION}`;
       const res = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
         method: "POST",
         headers: {
